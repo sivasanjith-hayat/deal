@@ -9,22 +9,23 @@ const AdminPanel = () => {
 
   // Timer logic
   useEffect(() => {
-    if (!timerRunning || timerSeconds <= 0) return;
+    if (!timerRunning) return;
     const interval = setInterval(() => {
-      const newTime = useEventStore.getState().timerSeconds - 1;
+      const state = useEventStore.getState();
+      const newTime = state.timerSeconds - 1;
       if (newTime <= 0) {
-        store.setTimerSeconds(0);
-        store.setTimerRunning(false);
-        if (store.status === 'deal_window') {
-          store.setProjectorMode('waiting');
-          store.setStatus('waiting');
+        state.setTimerSeconds(0);
+        state.setTimerRunning(false);
+        if (state.status === 'deal_window') {
+          state.setProjectorMode('waiting');
+          state.setStatus('waiting');
         }
       } else {
-        store.setTimerSeconds(newTime);
+        state.setTimerSeconds(newTime);
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [timerRunning, timerSeconds, store]);
+  }, [timerRunning]);
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
