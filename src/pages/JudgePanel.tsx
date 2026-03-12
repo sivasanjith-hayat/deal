@@ -1,27 +1,39 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEventStore } from '@/store/eventStore';
+import { useAuthStore } from '@/store/authStore';
 import { DealLockOverlay } from '@/components/DealLockOverlay';
+import { useNavigate } from 'react-router-dom';
 
 const JudgePanel = () => {
+  const navigate = useNavigate();
+  const currentUser = useAuthStore(s => s.currentUser);
+  const logout = useAuthStore(s => s.logout);
+
   const {
     judges, teams, currentTeamIndex, timerSeconds, status, minInvestment, maxInvestment,
-    makeDeal, noDeal, setProjectorMode, addJudgeNote, judgeNotes, notifications,
+    makeDeal, noDeal, setProjectorMode, addJudgeNote, notifications,
   } = useEventStore();
 
-  const [selectedJudgeId, setSelectedJudgeId] = useState<string | null>(null);
+  const [adminSelectedJudgeId, setAdminSelectedJudgeId] = useState<string | null>(null);
+
+  // Auto-select judge based on logged-in shark user, or allow admin to view and select
+  const isViewAdmin = currentUser?.role === 'admin';
+  const effectiveJudgeId = isViewAdmin ? (adminSelectedJudgeId || judges[0]?.id) : (currentUser?.judgeId || null);
+  const judgeId = effectiveJudgeId;
+  const judge = judgeId ? judges.find(j => j.id === judgeId) : null;
+
   const [dealLockActive, setDealLockActive] = useState(false);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
 
-  const judge = selectedJudgeId ? judges.find(j => j.id === selectedJudgeId) : null;
   const currentTeam = teams[currentTeamIndex];
   const allDeals = useEventStore(s => s.deals);
   const allNotes = useEventStore(s => s.judgeNotes);
-  const deals = allDeals.filter(d => d.judgeId === selectedJudgeId);
-  const myNotes = allNotes.filter(n => n.judgeId === selectedJudgeId);
+  const deals = allDeals.filter(d => d.judgeId === judgeId);
+  const myNotes = allNotes.filter(n => n.judgeId === judgeId);
 
   const investmentOptions = [minInvestment, 1000, 2000, maxInvestment].filter(
     (v, i, a) => a.indexOf(v) === i && v >= minInvestment && v <= maxInvestment
@@ -43,21 +55,21 @@ const JudgePanel = () => {
   }, []);
 
   const handleConfirmDeal = useCallback((amount: number) => {
-    if (!selectedJudgeId) return;
-    makeDeal(selectedJudgeId, amount);
+    if (!judgeId) return;
+    makeDeal(judgeId, amount);
     setTimeout(() => setDealLockActive(false), 1500);
-  }, [makeDeal, selectedJudgeId]);
+  }, [makeDeal, judgeId]);
 
   const handleNoDeal = useCallback(() => {
-    if (!selectedJudgeId) return;
-    noDeal(selectedJudgeId);
-  }, [noDeal, selectedJudgeId]);
+    if (!judgeId) return;
+    noDeal(judgeId);
+  }, [noDeal, judgeId]);
 
   const handleSaveNote = useCallback(() => {
-    if (!selectedJudgeId || !currentTeam || !noteText.trim()) return;
-    addJudgeNote(selectedJudgeId, currentTeam.id, noteText.trim());
+    if (!judgeId || !currentTeam || !noteText.trim()) return;
+    addJudgeNote(judgeId, currentTeam.id, noteText.trim());
     setNoteText('');
-  }, [selectedJudgeId, currentTeam, noteText, addJudgeNote]);
+  }, [judgeId, currentTeam, noteText, addJudgeNote]);
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
@@ -67,33 +79,26 @@ const JudgePanel = () => {
 
   const isDealWindow = status === 'deal_window';
 
-  // Judge selector screen
-  if (!selectedJudgeId) {
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  // If no judge found for this user, show an error state
+  if (!judge) {
     return (
       <div className="flex flex-col h-screen bg-background items-center justify-center px-4">
-        <h1 className="font-display text-4xl font-bold text-foreground tracking-wider mb-2">SELECT YOUR SEAT</h1>
-        <p className="text-xs text-muted-foreground tracking-[0.3em] mb-8">JUDGE IDENTIFICATION</p>
-        <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
-          {judges.map(j => (
-            <motion.button
-              key={j.id}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedJudgeId(j.id)}
-              className="flex flex-col items-center justify-center p-6 rounded-md border border-border bg-card hover:border-deal-green/50 transition-colors"
-            >
-              <div className={`w-3 h-3 rounded-full mb-3 ${j.isOnline ? 'bg-deal-green' : 'bg-deal-red'}`} />
-              <span className="font-display text-lg text-foreground tracking-wider">{j.name}</span>
-              <span className="font-mono text-[10px] text-muted-foreground tabular-nums mt-1">
-                {j.balance.toLocaleString()} CR
-              </span>
-            </motion.button>
-          ))}
-        </div>
+        <h1 className="font-display text-3xl font-bold text-foreground tracking-wider mb-4">NO SEAT ASSIGNED</h1>
+        <p className="text-sm text-muted-foreground mb-6">Your account is not linked to a judge seat.</p>
+        <button
+          onClick={handleLogout}
+          className="px-6 py-2 rounded-md bg-deal-red font-mono text-sm text-destructive-foreground tracking-wider"
+        >
+          LOGOUT
+        </button>
       </div>
     );
   }
-
-  if (!judge) return null;
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden select-none">
@@ -127,12 +132,32 @@ const JudgePanel = () => {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div>
           <button
-            onClick={() => setSelectedJudgeId(null)}
+            onClick={isViewAdmin ? () => window.close() : handleLogout}
             className="text-[10px] text-muted-foreground tracking-widest hover:text-foreground transition-colors"
           >
-            ← SWITCH
+            {isViewAdmin ? '← CLOSE VIEW' : '← LOGOUT'}
           </button>
-          <p className="font-display text-lg text-foreground">{judge.name}</p>
+
+          {isViewAdmin ? (
+            <div className="mt-1 flex items-center gap-2">
+              <select
+                value={judgeId || ''}
+                onChange={(e) => setAdminSelectedJudgeId(e.target.value)}
+                className="bg-transparent text-lg font-display text-deal-yellow outline-none uppercase tracking-wider appearance-none cursor-pointer"
+              >
+                {judges.map(j => (
+                  <option key={j.id} value={j.id} className="bg-background text-foreground font-mono text-sm">
+                    {j.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[10px] bg-deal-yellow/20 text-deal-yellow px-1.5 py-0.5 rounded-sm font-mono tracking-widest">
+                ADMIN VIEW
+              </span>
+            </div>
+          ) : (
+            <p className="font-display text-lg text-foreground mt-1">{judge.name}</p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-[10px] text-muted-foreground tracking-widest">CREDITS</p>
@@ -265,7 +290,7 @@ const JudgePanel = () => {
           {formatTime(timerSeconds)}
         </div>
         <p className="text-[10px] text-muted-foreground tracking-[0.3em] mt-2 uppercase">
-          {status === 'deal_window' ? 'DEAL WINDOW' : status === 'qa' ? 'Q&A' : status === 'pitching' ? 'PITCH' : status === 'paused' ? 'PAUSED' : status === 'ended' ? 'ENDED' : 'STANDBY'}
+          {status === 'deal_window' ? 'DEAL WINDOW' : status === 'pitching' ? 'PITCH' : status === 'paused' ? 'PAUSED' : status === 'ended' ? 'ENDED' : 'STANDBY'}
         </p>
       </div>
 

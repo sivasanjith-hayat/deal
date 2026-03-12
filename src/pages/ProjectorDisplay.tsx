@@ -22,7 +22,7 @@ const ConfettiParticle = ({ index }: { index: number }) => {
 };
 
 const ProjectorDisplay = () => {
-  const { projectorMode, timerSeconds, lastDeal, teams, currentTeamIndex, judges, deals } = useEventStore();
+  const { projectorMode, timerSeconds, lastDeal, teams, currentTeamIndex, judges, deals, judgeNotes } = useEventStore();
   const currentTeam = teams[currentTeamIndex];
 
   const formatTime = (s: number) => {
@@ -31,9 +31,11 @@ const ProjectorDisplay = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Leaderboard data
-  const leaderboard = useMemo(() => {
-    const judgeStats = judges.map(j => ({
+  // War Room data
+  const warRoomData = useMemo(() => {
+    const relevantJudges = judges.filter(j => j.isOnline);
+
+    const judgeStats = relevantJudges.map(j => ({
       name: j.name,
       totalInvestment: j.totalInvestment,
       totalDeals: j.totalDeals,
@@ -42,8 +44,12 @@ const ProjectorDisplay = () => {
     const totalInvested = deals.reduce((a, d) => a + d.amount, 0);
     const largestDeal = deals.length > 0 ? Math.max(...deals.map(d => d.amount)) : 0;
 
-    return { judgeStats, totalInvested, largestDeal, totalDeals: deals.length };
-  }, [judges, deals]);
+    // Upcoming teams (after current)
+    const upcomingTeams = teams.slice(currentTeamIndex + 1);
+    const nextTeam = upcomingTeams.length > 0 ? upcomingTeams[0] : null;
+
+    return { judgeStats, totalInvested, largestDeal, totalDeals: deals.length, upcomingTeams, nextTeam };
+  }, [judges, deals, teams, currentTeamIndex]);
 
   const confettiParticles = useMemo(() => Array.from({ length: 40 }, (_, i) => i), []);
 
@@ -62,6 +68,21 @@ const ProjectorDisplay = () => {
               SHARKS ARE<br />DELIBERATING
             </h1>
             <div className="mt-8 w-24 h-px bg-muted-foreground/20 mx-auto" />
+
+            {/* Next team preview */}
+            {warRoomData.nextTeam && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="mt-10"
+              >
+                <p className="text-[10px] text-muted-foreground tracking-[0.4em] mb-2">NEXT UP</p>
+                <p className="font-display text-2xl text-muted-foreground/60 tracking-wider">
+                  {warRoomData.nextTeam.name}
+                </p>
+              </motion.div>
+            )}
           </motion.div>
         )}
 
@@ -74,16 +95,59 @@ const ProjectorDisplay = () => {
             className="text-center"
           >
             {currentTeam && (
-              <p className="font-display text-2xl sm:text-3xl text-muted-foreground tracking-[0.3em] mb-6">
-                {currentTeam.name}
-              </p>
+              <div className="mb-8">
+                <p className="font-display text-4xl sm:text-5xl text-foreground tracking-[0.3em] mb-3 drop-shadow-lg">
+                  {currentTeam.name}
+                </p>
+                {currentTeam.members && (
+                  <p className="font-mono text-xs sm:text-sm text-deal-green/80 flex justify-center gap-2 mb-3 tracking-widest uppercase">
+                    <span className="opacity-60">TEAM:</span>
+                    <span>{currentTeam.members}</span>
+                  </p>
+                )}
+                <p className="font-mono text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed border-b border-border/50 pb-6">
+                  {currentTeam.description}
+                </p>
+              </div>
             )}
-            <div className="font-mono text-[8rem] sm:text-[12rem] lg:text-[16rem] tabular-nums text-foreground leading-none">
+            <div className="font-mono text-[6rem] sm:text-[9rem] lg:text-[11rem] tabular-nums text-foreground leading-none drop-shadow-2xl">
               {formatTime(timerSeconds)}
             </div>
-            <p className="font-mono text-sm text-muted-foreground tracking-[0.5em] mt-4">
+            <p className="font-mono text-xs sm:text-sm text-foreground/40 tracking-[0.5em] mt-4 mb-8">
               DEAL WINDOW
             </p>
+
+            {/* Live Judge Feedback */}
+            {judgeNotes.filter(n => n.teamId === currentTeam?.id).length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-4xl mx-auto mt-4 text-left w-full px-4"
+              >
+                <div className="flex items-center gap-4 mb-4">
+                  <h3 className="text-deal-yellow font-display text-xs tracking-[0.2em]">LIVE SHARK FEEDBACK</h3>
+                  <div className="flex-1 h-px bg-border/50"></div>
+                </div>
+                <div className="flex flex-col gap-3 max-h-[25vh] overflow-y-auto pr-2 pointer-events-auto custom-scrollbar">
+                  {judgeNotes.filter(n => n.teamId === currentTeam?.id).slice().reverse().map(note => {
+                    const judge = judges.find(j => j.id === note.judgeId);
+                    return (
+                      <div
+                        key={note.id}
+                        className="p-4 bg-secondary/80 backdrop-blur-md rounded-lg border border-border/50 shadow-xl flex gap-3 items-start"
+                      >
+                        <span className="font-bold text-deal-green font-mono uppercase tracking-wider whitespace-nowrap">
+                          {judge?.name.split(' ')[0]}:
+                        </span>
+                        <span className="text-muted-foreground font-mono leading-relaxed text-sm">
+                          {note.text}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
           </motion.div>
         )}
 
@@ -179,62 +243,124 @@ const ProjectorDisplay = () => {
           </motion.div>
         )}
 
-        {projectorMode === 'leaderboard' && (
+        {projectorMode === 'war_room' && (
           <motion.div
-            key="leaderboard"
+            key="war_room"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-center w-full max-w-3xl px-8"
+            className="text-center w-full max-w-4xl px-8"
           >
             <h1 className="font-display text-4xl sm:text-6xl font-bold text-foreground tracking-wider mb-8">
-              LEADERBOARD
+              WAR ROOM
             </h1>
 
             {/* Summary Stats */}
             <div className="grid grid-cols-3 gap-6 mb-10">
               <div>
                 <p className="text-[10px] text-muted-foreground tracking-widest">TOTAL INVESTED</p>
-                <p className="font-mono text-3xl tabular-nums text-deal-green">{leaderboard.totalInvested.toLocaleString()}</p>
+                <p className="font-mono text-3xl tabular-nums text-deal-green">{warRoomData.totalInvested.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground tracking-widest">TOTAL DEALS</p>
-                <p className="font-mono text-3xl tabular-nums text-foreground">{leaderboard.totalDeals}</p>
+                <p className="font-mono text-3xl tabular-nums text-foreground">{warRoomData.totalDeals}</p>
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground tracking-widest">LARGEST DEAL</p>
-                <p className="font-mono text-3xl tabular-nums text-deal-yellow">{leaderboard.largestDeal.toLocaleString()}</p>
+                <p className="font-mono text-3xl tabular-nums text-deal-yellow">{warRoomData.largestDeal.toLocaleString()}</p>
               </div>
             </div>
 
-            {/* Judge Rankings */}
-            <div className="space-y-3">
-              {leaderboard.judgeStats.map((j, i) => (
-                <motion.div
-                  key={j.name}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.15 }}
-                  className="flex items-center justify-between p-4 bg-card rounded-md border border-border"
-                >
-                  <div className="flex items-center gap-4">
-                    <span className="font-mono text-2xl text-muted-foreground tabular-nums w-8">
-                      {i + 1}
-                    </span>
-                    <span className="font-display text-xl text-foreground tracking-wider">{j.name}</span>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground tracking-widest">DEALS</p>
-                      <p className="font-mono text-sm tabular-nums">{j.totalDeals}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Judge Rankings */}
+              <div>
+                <h2 className="font-display text-lg text-muted-foreground tracking-wider mb-4 text-left">SHARK RANKINGS</h2>
+                <div className="space-y-3">
+                  {warRoomData.judgeStats.map((j, i) => (
+                    <motion.div
+                      key={j.name}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.15 }}
+                      className="flex items-center justify-between p-4 bg-card rounded-md border border-border"
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="font-mono text-2xl text-muted-foreground tabular-nums w-8">
+                          {i + 1}
+                        </span>
+                        <span className="font-display text-lg text-foreground tracking-wider text-left">{j.name}</span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <p className="text-[10px] text-muted-foreground tracking-widest">DEALS</p>
+                          <p className="font-mono text-sm tabular-nums">{j.totalDeals}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-muted-foreground tracking-widest">INVESTED</p>
+                          <p className="font-mono text-lg tabular-nums text-deal-green">{j.totalInvestment.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Team Queue */}
+              <div>
+                <h2 className="font-display text-lg text-muted-foreground tracking-wider mb-4 text-left">NEXT TO PRESENT</h2>
+
+                {/* Currently Presenting */}
+                {currentTeam && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-deal-green/10 rounded-md border border-deal-green/30 mb-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-left">
+                        <p className="text-[10px] text-deal-green tracking-widest mb-1">▶ NOW PRESENTING</p>
+                        <p className="font-display text-xl text-deal-green tracking-wider">{currentTeam.name}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{currentTeam.description}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground tracking-widest">INVESTED</p>
-                      <p className="font-mono text-lg tabular-nums text-deal-green">{j.totalInvestment.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                )}
+
+                {/* Upcoming Queue */}
+                <div className="space-y-2">
+                  {warRoomData.upcomingTeams.length === 0 ? (
+                    <p className="text-xs text-muted-foreground font-mono p-4 text-left">No more teams in queue</p>
+                  ) : (
+                    warRoomData.upcomingTeams.map((team, i) => (
+                      <motion.div
+                        key={team.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.3 + i * 0.1 }}
+                        className={`flex items-center justify-between p-3 rounded-md border transition-all ${i === 0
+                          ? 'bg-deal-blue/10 border-deal-blue/30'
+                          : 'bg-card border-border'
+                          }`}
+                      >
+                        <div className="flex items-center gap-3 text-left">
+                          <span className="font-mono text-lg text-muted-foreground tabular-nums w-6">
+                            {i + 1}
+                          </span>
+                          <div>
+                            <p className={`font-display text-base tracking-wider ${i === 0 ? 'text-deal-blue' : 'text-foreground'}`}>
+                              {team.name}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">{team.description}</p>
+                          </div>
+                        </div>
+                        {i === 0 && (
+                          <span className="text-[10px] font-mono text-deal-blue tracking-widest">UP NEXT</span>
+                        )}
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
