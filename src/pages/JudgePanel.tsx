@@ -28,14 +28,15 @@ const JudgePanel = () => {
   ).sort((a, b) => a - b);
 
   // Watch for new notifications
+  const notifCount = notifications.length;
   useEffect(() => {
-    if (notifications.length > 0) {
-      const latest = notifications[notifications.length - 1];
+    if (notifCount > 0) {
+      const latest = notifications[notifCount - 1];
       setNotification(latest.message);
       const timer = setTimeout(() => setNotification(null), 3000);
       return () => clearTimeout(timer);
     }
-  }, [notifications.length]);
+  }, [notifCount]);
 
   const handleDeal = useCallback(() => {
     setDealLockActive(true);
