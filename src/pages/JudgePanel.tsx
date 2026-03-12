@@ -18,8 +18,10 @@ const JudgePanel = () => {
 
   const judge = selectedJudgeId ? judges.find(j => j.id === selectedJudgeId) : null;
   const currentTeam = teams[currentTeamIndex];
-  const deals = useEventStore(s => s.deals.filter(d => d.judgeId === selectedJudgeId));
-  const myNotes = useEventStore(s => s.judgeNotes.filter(n => n.judgeId === selectedJudgeId));
+  const allDeals = useEventStore(s => s.deals);
+  const allNotes = useEventStore(s => s.judgeNotes);
+  const deals = allDeals.filter(d => d.judgeId === selectedJudgeId);
+  const myNotes = allNotes.filter(n => n.judgeId === selectedJudgeId);
 
   const investmentOptions = [minInvestment, 1000, 2000, maxInvestment].filter(
     (v, i, a) => a.indexOf(v) === i && v >= minInvestment && v <= maxInvestment
