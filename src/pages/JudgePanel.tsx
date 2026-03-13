@@ -314,15 +314,7 @@ const JudgePanel = () => {
             NO DEAL
           </motion.button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <motion.button
-            whileTap={{ scale: 0.95 }}
-            disabled={!isDealWindow}
-            onClick={() => setProjectorMode('negotiate')}
-            className="h-14 rounded-md font-display text-lg font-bold tracking-wider bg-deal-yellow text-warning-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
-          >
-            NEGOTIATE
-          </motion.button>
+        <div className="grid grid-cols-1 gap-3">
           <motion.button
             whileTap={{ scale: 0.95 }}
             disabled={!isDealWindow}

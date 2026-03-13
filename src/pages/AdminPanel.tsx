@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useEventStore, type EventStatus, type Judge, type Team } from '@/store/eventStore';
 import { useAuthStore } from '@/store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -184,6 +185,11 @@ const AdminPanel = () => {
     store.selectTeam(index);
     store.pushNotification(`Team ${teams[index]?.name} selected — pitch starting`, 'info');
   }, [store, teams]);
+
+  const onDragEnd = useCallback((result: DropResult) => {
+    if (!result.destination) return;
+    store.reorderTeams(result.source.index, result.destination.index);
+  }, [store]);
 
   const handleAddTeam = useCallback(() => {
     if (!newTeamName.trim()) return;
@@ -400,46 +406,113 @@ const AdminPanel = () => {
           <h2 className="font-display text-lg text-foreground mb-4 tracking-wider">EVENT CONTROL</h2>
 
           {/* Current Team */}
-          <div className="mb-4 p-3 bg-secondary rounded-md">
-            <p className="text-[10px] text-muted-foreground tracking-widest">CURRENT TEAM</p>
-            <p className="font-display text-xl text-foreground">{currentTeam?.name || 'NONE'}</p>
-            <p className="text-xs text-muted-foreground">{currentTeam?.description}</p>
-            <p className="font-mono text-[10px] text-muted-foreground mt-1">
-              {currentTeamIndex + 1} / {teams.length}
-            </p>
+          <div className="mb-4 space-y-3">
+            <div className="p-3 bg-secondary rounded-md">
+              <p className="text-[10px] text-muted-foreground tracking-widest uppercase mb-1">Current Pitcher</p>
+              <p className="font-display text-xl text-deal-green leading-tight">{currentTeam?.name || 'STANDBY'}</p>
+              <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-tighter">
+                {currentTeamIndex + 1} of {teams.length} Teams
+              </p>
+            </div>
+
+            <div className="p-3 bg-deal-blue/5 border border-deal-blue/20 rounded-md">
+              <p className="text-[10px] text-muted-foreground tracking-widest uppercase mb-1">Queued Next</p>
+              <p className="font-display text-lg text-deal-blue leading-tight">
+                {teams[currentTeamIndex + 1]?.name || 'NONE (END OF QUEUE)'}
+              </p>
+              {teams[currentTeamIndex + 1] && (
+                <button
+                  onClick={() => store.nextTeam()}
+                  disabled={isEnded}
+                  className="mt-2 w-full py-1 bg-deal-blue/20 text-deal-blue hover:bg-deal-blue/30 rounded-sm text-[10px] font-mono tracking-widest transition-colors disabled:opacity-30"
+                >
+                  START NEXT PITCH →
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Timer */}
           <div className="mb-4 p-3 bg-secondary rounded-md text-center">
-            <p className="font-mono text-3xl tabular-nums text-foreground">{formatTime(timerSeconds)}</p>
-            <p className="text-[10px] text-muted-foreground tracking-widest mt-1">
-              {timerRunning ? 'RUNNING' : 'STOPPED'}
-            </p>
+            <p className="font-mono text-4xl tabular-nums text-foreground">{formatTime(timerSeconds)}</p>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${timerRunning ? 'bg-deal-green animate-pulse' : 'bg-muted-foreground'}`} />
+              <p className="text-[10px] text-muted-foreground tracking-widest">
+                {timerRunning ? 'TIMER ACTIVE' : 'TIMER STOPPED'}
+              </p>
+            </div>
           </div>
 
-          {/* Select Next Team */}
+          {/* Select Next Team & Queue Reordering */}
           <div className="mb-4">
-            <p className="text-[10px] text-muted-foreground tracking-widest mb-2">SELECT NEXT TEAM</p>
-            <div className="space-y-1">
-              {teams.map((team, i) => (
-                <button
-                  key={team.id}
-                  onClick={() => handleSelectTeam(i)}
-                  disabled={isEnded || i === currentTeamIndex}
-                  className={`w-full flex items-center justify-between p-2 rounded-sm text-xs transition-all ${i === currentTeamIndex
-                    ? 'bg-deal-green/20 text-deal-green border border-deal-green/30 cursor-default'
-                    : i < currentTeamIndex
-                      ? 'text-muted-foreground/50 line-through bg-secondary/50'
-                      : 'text-foreground bg-secondary hover:bg-deal-blue/10 hover:border-deal-blue/30 border border-transparent disabled:opacity-30'
-                    }`}
-                >
-                  <span className="font-display">{team.name}</span>
-                  <span className="font-mono text-[10px]">
-                    {i === currentTeamIndex ? '▶ ACTIVE' : i < currentTeamIndex ? 'DONE' : `#${i + 1}`}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <p className="text-[10px] text-muted-foreground tracking-widest mb-2">TEAM QUEUE (DRAG TO REORDER)</p>
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="teams">
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="space-y-1"
+                  >
+                    {teams.map((team, i) => (
+                      <Draggable key={team.id} draggableId={team.id} index={i} isDragDisabled={isEnded || i <= currentTeamIndex}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            style={provided.draggableProps.style}
+                            className={`w-full flex items-center justify-between p-2 rounded-sm text-xs transition-all ${i === currentTeamIndex
+                              ? 'bg-deal-green/20 text-deal-green border border-deal-green/30 cursor-default'
+                              : i < currentTeamIndex
+                                ? 'text-muted-foreground/50 line-through bg-secondary/50 cursor-not-allowed'
+                                : snapshot.isDragging
+                                  ? 'bg-deal-blue/20 border border-deal-blue/30 scale-105 z-10 shadow-lg cursor-grabbing'
+                                  : 'text-foreground bg-secondary hover:bg-deal-blue/10 hover:border-deal-blue/30 border border-transparent cursor-grab'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {/* Drag handle icon (only for mutable items) */}
+                              {i > currentTeamIndex && !isEnded && (
+                                <span className="text-muted-foreground/30 hover:text-muted-foreground cursor-grab active:cursor-grabbing">
+                                  ⋮⋮
+                                </span>
+                              )}
+                              <span className="font-display truncate max-w-[100px]">{team.name}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              {i > currentTeamIndex && !isEnded && (
+                                <>
+                                  <button
+                                    onClick={() => store.setNextTeam(team.id)}
+                                    title="Set as next presenter"
+                                    className="px-2 py-0.5 rounded-sm bg-deal-blue/10 text-deal-blue text-[9px] hover:bg-deal-blue/20 transition-colors uppercase font-mono"
+                                  >
+                                    Set Next
+                                  </button>
+                                  <button
+                                    onClick={() => handleSelectTeam(i)}
+                                    title="Present immediately"
+                                    className="px-2 py-0.5 rounded-sm bg-deal-green/10 text-deal-green text-[9px] hover:bg-deal-green/20 transition-colors uppercase font-mono"
+                                  >
+                                    Present Now
+                                  </button>
+                                </>
+                              )}
+                              <span className="font-mono text-[10px] w-12 text-right shrink-0">
+                                {i === currentTeamIndex ? '▶ ACTIVE' : i < currentTeamIndex ? 'DONE' : `#${i + 1}`}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
           </div>
 
           {/* Controls */}
@@ -453,7 +526,7 @@ const AdminPanel = () => {
               </button>
               <button
                 onClick={() => store.setProjectorMode('war_room')}
-                className="h-10 rounded-md bg-secondary font-display text-sm font-bold tracking-wider text-secondary-foreground"
+                className="h-10 rounded-md bg-secondary border border-border font-display text-sm font-bold tracking-wider text-foreground"
               >
                 WAR ROOM
               </button>

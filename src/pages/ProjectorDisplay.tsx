@@ -1,370 +1,218 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEventStore } from '@/store/eventStore';
-import { useMemo } from 'react';
-
-const ConfettiParticle = ({ index }: { index: number }) => {
-  const colors = ['bg-deal-green', 'bg-deal-yellow', 'bg-deal-blue', 'bg-foreground'];
-  const color = colors[index % colors.length];
-  const left = `${Math.random() * 100}%`;
-  const delay = Math.random() * 0.8;
-  const duration = 1.5 + Math.random() * 1.5;
-  const size = 4 + Math.random() * 8;
-
-  return (
-    <motion.div
-      className={`absolute ${color} rounded-sm`}
-      style={{ left, width: size, height: size }}
-      initial={{ top: '-5%', opacity: 1, rotate: 0 }}
-      animate={{ top: '110%', opacity: 0, rotate: 360 + Math.random() * 360 }}
-      transition={{ delay, duration, ease: 'easeIn' }}
-    />
-  );
-};
+import { useAuthStore } from '@/store/authStore';
+import { useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ProjectorDisplay = () => {
-  const { projectorMode, timerSeconds, lastDeal, teams, currentTeamIndex, judges, deals, judgeNotes } = useEventStore();
+  const navigate = useNavigate();
+  const { teams, currentTeamIndex, judges } = useEventStore();
+  const { currentUser, logout } = useAuthStore();
   const currentTeam = teams[currentTeamIndex];
 
-  const formatTime = (s: number) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Internal security check: Redirect if not logged in
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login', { replace: true });
+    }
+  }, [currentUser, navigate]);
 
-  // War Room data
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  }
+
+  // War Room data simplified
   const warRoomData = useMemo(() => {
-    const relevantJudges = judges.filter(j => j.isOnline);
-
-    const judgeStats = relevantJudges.map(j => ({
-      name: j.name,
-      totalInvestment: j.totalInvestment,
-      totalDeals: j.totalDeals,
-    })).sort((a, b) => b.totalInvestment - a.totalInvestment);
-
-    const totalInvested = deals.reduce((a, d) => a + d.amount, 0);
-    const largestDeal = deals.length > 0 ? Math.max(...deals.map(d => d.amount)) : 0;
-
-    // Upcoming teams (after current)
-    const upcomingTeams = teams.slice(currentTeamIndex + 1);
-    const nextTeam = upcomingTeams.length > 0 ? upcomingTeams[0] : null;
-
-    return { judgeStats, totalInvested, largestDeal, totalDeals: deals.length, upcomingTeams, nextTeam };
-  }, [judges, deals, teams, currentTeamIndex]);
-
-  const confettiParticles = useMemo(() => Array.from({ length: 40 }, (_, i) => i), []);
+    // All teams with their original index for status checking
+    const allTeams = teams.map((t, idx) => ({ ...t, originalIndex: idx }));
+    return { allTeams };
+  }, [teams]);
 
   return (
-    <div className="h-screen w-screen bg-background flex items-center justify-center overflow-hidden relative">
-      <AnimatePresence mode="wait">
-        {projectorMode === 'waiting' && (
-          <motion.div
-            key="waiting"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center"
-          >
-            <h1 className="font-display text-5xl sm:text-7xl lg:text-8xl font-bold text-muted-foreground/40 tracking-wider">
-              SHARKS ARE<br />DELIBERATING
-            </h1>
-            <div className="mt-8 w-24 h-px bg-muted-foreground/20 mx-auto" />
+    <div className="h-screen w-screen bg-background flex flex-col items-center overflow-hidden relative p-8">
+      {/* Session Info & Logout */}
+      <div className="absolute top-4 right-8 flex items-center gap-4 z-20">
+        <div className="text-right hidden sm:block">
+          <p className="text-[10px] text-muted-foreground font-mono tracking-widest uppercase opacity-60">Session</p>
+          <p className="text-xs text-foreground font-mono tracking-wider">{currentUser?.displayName || '...'}</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="px-4 py-1.5 rounded-sm border border-border/50 text-[10px] font-mono text-muted-foreground hover:text-deal-red hover:border-deal-red/30 hover:bg-deal-red/5 transition-all tracking-widest uppercase"
+        >
+          Logout
+        </button>
+      </div>
 
-            {/* Next team preview */}
-            {warRoomData.nextTeam && (
+      <h1 className="font-display text-4xl sm:text-6xl font-bold text-foreground tracking-wider mb-8 text-center">
+        WAR ROOM
+      </h1>
+
+      <div className="w-full max-w-7xl mx-auto flex flex-col lg:flex-row h-full overflow-hidden gap-12">
+        {/* LEFT SIDE: SHARK PANEL */}
+        <div className="w-full lg:w-[450px] flex flex-col shrink-0 border-r border-border/30 pr-10 h-full overflow-hidden bg-card/5">
+          <h2 className="font-display text-3xl font-bold text-deal-green tracking-[0.2em] mb-10 text-left uppercase">
+            The Sharks
+          </h2>
+
+          <div className="space-y-8 overflow-y-auto custom-scrollbar pr-4">
+            {judges.map((j, i) => (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                className="mt-10"
+                key={j.id}
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 * i }}
+                className="group relative"
               >
-                <p className="text-[10px] text-muted-foreground tracking-[0.4em] mb-2">NEXT UP</p>
-                <p className="font-display text-2xl text-muted-foreground/60 tracking-wider">
-                  {warRoomData.nextTeam.name}
-                </p>
-              </motion.div>
-            )}
-          </motion.div>
-        )}
+                <div className="flex items-start gap-5">
+                  <div className="mt-2 shrink-0">
+                    <div className="w-3 h-3 rounded-full bg-deal-green shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse" />
+                  </div>
 
-        {projectorMode === 'countdown' && (
-          <motion.div
-            key="countdown"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center"
-          >
+                  <div className="flex-1">
+                    <p className="font-display text-2xl sm:text-3xl text-foreground font-bold tracking-wide group-hover:text-deal-green transition-colors leading-tight mb-2">
+                      {j.name.split('(')[0].trim()}
+                    </p>
+
+                    {j.name.includes('(') && (
+                      <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase leading-relaxed max-w-[320px]">
+                        {j.name.match(/\(([^)]+)\)/)?.[1] || ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-8 border-b border-border/10 w-full group-last:border-none" />
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="mt-auto py-10">
+            <div className="p-6 rounded-xl bg-deal-green/5 border border-deal-green/20 shadow-inner">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-muted-foreground font-mono tracking-[0.3em] uppercase">Event Status</p>
+                <span className="flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-deal-green opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-deal-green"></span>
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <p className="font-display text-4xl text-deal-green font-bold">LIVE</p>
+                <p className="text-muted-foreground text-sm font-mono ml-4 uppercase tracking-tighter">
+                  {teams.length} Teams Registered
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT SIDE: PITCH QUEUE */}
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
+          <h2 className="font-display text-2xl text-muted-foreground tracking-wider mb-6 text-center lg:text-right uppercase">Pitch Queue</h2>
+
+          <div className="space-y-6 overflow-y-auto pr-4 custom-scrollbar pb-12">
+            {/* NOW PRESENTING SECTION */}
             {currentTeam && (
               <div className="mb-8">
-                <p className="font-display text-4xl sm:text-5xl text-foreground tracking-[0.3em] mb-3 drop-shadow-lg">
-                  {currentTeam.name}
-                </p>
-                {currentTeam.members && (
-                  <p className="font-mono text-xs sm:text-sm text-deal-green/80 flex justify-center gap-2 mb-3 tracking-widest uppercase">
-                    <span className="opacity-60">TEAM:</span>
-                    <span>{currentTeam.members}</span>
-                  </p>
-                )}
-                <p className="font-mono text-sm sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed border-b border-border/50 pb-6">
-                  {currentTeam.description}
-                </p>
-              </div>
-            )}
-            <div className="font-mono text-[6rem] sm:text-[9rem] lg:text-[11rem] tabular-nums text-foreground leading-none drop-shadow-2xl">
-              {formatTime(timerSeconds)}
-            </div>
-            <p className="font-mono text-xs sm:text-sm text-foreground/40 tracking-[0.5em] mt-4 mb-8">
-              DEAL WINDOW
-            </p>
-
-            {/* Live Judge Feedback */}
-            {judgeNotes.filter(n => n.teamId === currentTeam?.id).length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="max-w-4xl mx-auto mt-4 text-left w-full px-4"
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <h3 className="text-deal-yellow font-display text-xs tracking-[0.2em]">LIVE SHARK FEEDBACK</h3>
-                  <div className="flex-1 h-px bg-border/50"></div>
-                </div>
-                <div className="flex flex-col gap-3 max-h-[25vh] overflow-y-auto pr-2 pointer-events-auto custom-scrollbar">
-                  {judgeNotes.filter(n => n.teamId === currentTeam?.id).slice().reverse().map(note => {
-                    const judge = judges.find(j => j.id === note.judgeId);
-                    return (
-                      <div
-                        key={note.id}
-                        className="p-4 bg-secondary/80 backdrop-blur-md rounded-lg border border-border/50 shadow-xl flex gap-3 items-start"
-                      >
-                        <span className="font-bold text-deal-green font-mono uppercase tracking-wider whitespace-nowrap">
-                          {judge?.name.split(' ')[0]}:
-                        </span>
-                        <span className="text-muted-foreground font-mono leading-relaxed text-sm">
-                          {note.text}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-
-        {projectorMode === 'deal' && lastDeal && (
-          <motion.div
-            key="deal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center w-full"
-          >
-            {/* Confetti */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              {confettiParticles.map(i => (
-                <ConfettiParticle key={i} index={i} />
-              ))}
-            </div>
-
-            {/* Heartbeat line phase */}
-            <motion.div
-              initial={{ opacity: 1 }}
-              animate={{ opacity: 0 }}
-              transition={{ delay: 1.5, duration: 0.3 }}
-              className="absolute inset-0 flex items-center justify-center"
-            >
-              <div className="w-2/3 h-px bg-deal-green animate-heartbeat" />
-            </motion.div>
-
-            {/* Deal secured reveal */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.8, duration: 0.5 }}
-            >
-              <h1 className="font-display text-6xl sm:text-8xl lg:text-9xl font-bold text-deal-green tracking-wider mb-6">
-                DEAL SECURED
-              </h1>
-              <div className="w-32 h-px bg-deal-green/40 mx-auto mb-6" />
-              <p className="font-display text-3xl sm:text-4xl text-foreground tracking-wider mb-2">
-                {lastDeal.judgeName}
-              </p>
-              <p className="font-mono text-4xl sm:text-5xl text-deal-green tabular-nums">
-                {lastDeal.amount.toLocaleString()} CREDITS
-              </p>
-              <p className="font-mono text-lg text-muted-foreground tracking-widest mt-4">
-                → {lastDeal.teamName}
-              </p>
-            </motion.div>
-          </motion.div>
-        )}
-
-        {projectorMode === 'no_deal' && (
-          <motion.div
-            key="nodeal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center animate-flash-red"
-          >
-            <h1 className="font-display text-6xl sm:text-8xl lg:text-9xl font-bold text-deal-red tracking-wider">
-              OUT
-            </h1>
-            <p className="font-display text-2xl sm:text-3xl text-muted-foreground tracking-[0.3em] mt-4">
-              NO DEAL STRUCK
-            </p>
-          </motion.div>
-        )}
-
-        {projectorMode === 'negotiate' && (
-          <motion.div
-            key="negotiate"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center"
-          >
-            <h1 className="font-display text-5xl sm:text-7xl lg:text-8xl font-bold text-deal-yellow tracking-wider">
-              NEGOTIATION
-            </h1>
-            <p className="font-display text-2xl sm:text-3xl text-muted-foreground tracking-[0.3em] mt-4">
-              IN PROGRESS
-            </p>
-            <div className="mt-8 flex justify-center gap-2">
-              {[0, 1, 2].map(i => (
+                <h3 className="text-[10px] text-deal-green tracking-widest mb-3 text-center lg:text-right uppercase font-mono">Now Presenting</h3>
                 <motion.div
-                  key={i}
-                  className="w-2 h-2 rounded-full bg-deal-yellow"
-                  animate={{ opacity: [0.2, 1, 0.2] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-8 bg-deal-green/5 rounded-lg border border-deal-green/30 shadow-[0_0_50px_-12px_rgba(16,185,129,0.2)] relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 w-64 h-64 bg-deal-green/10 rounded-full blur-[100px] pointer-events-none -ml-20 -mt-20" />
 
-        {projectorMode === 'war_room' && (
-          <motion.div
-            key="war_room"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-center w-full max-w-4xl px-8"
-          >
-            <h1 className="font-display text-4xl sm:text-6xl font-bold text-foreground tracking-wider mb-8">
-              WAR ROOM
-            </h1>
-
-            {/* Summary Stats */}
-            <div className="grid grid-cols-3 gap-6 mb-10">
-              <div>
-                <p className="text-[10px] text-muted-foreground tracking-widest">TOTAL INVESTED</p>
-                <p className="font-mono text-3xl tabular-nums text-deal-green">{warRoomData.totalInvested.toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground tracking-widest">TOTAL DEALS</p>
-                <p className="font-mono text-3xl tabular-nums text-foreground">{warRoomData.totalDeals}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground tracking-widest">LARGEST DEAL</p>
-                <p className="font-mono text-3xl tabular-nums text-deal-yellow">{warRoomData.largestDeal.toLocaleString()}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Judge Rankings */}
-              <div>
-                <h2 className="font-display text-lg text-muted-foreground tracking-wider mb-4 text-left">SHARK RANKINGS</h2>
-                <div className="space-y-3">
-                  {warRoomData.judgeStats.map((j, i) => (
-                    <motion.div
-                      key={j.name}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.15 }}
-                      className="flex items-center justify-between p-4 bg-card rounded-md border border-border"
-                    >
-                      <div className="flex items-center gap-4">
-                        <span className="font-mono text-2xl text-muted-foreground tabular-nums w-8">
-                          {i + 1}
-                        </span>
-                        <span className="font-display text-lg text-foreground tracking-wider text-left">{j.name}</span>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10 text-center md:text-left">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-center md:justify-start gap-4 mb-2">
+                        <span className="font-mono text-xl text-deal-green opacity-50">#{currentTeamIndex + 1}</span>
+                        <p className="font-display text-4xl sm:text-5xl text-deal-green tracking-wider font-bold">{currentTeam.name}</p>
                       </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-right">
-                          <p className="text-[10px] text-muted-foreground tracking-widest">DEALS</p>
-                          <p className="font-mono text-sm tabular-nums">{j.totalDeals}</p>
+
+                      {currentTeam.members && (
+                        <div className="bg-deal-green/10 p-4 rounded-md border border-deal-green/20 mb-4">
+                          <p className="text-[10px] text-deal-green font-mono tracking-widest uppercase mb-1 opacity-70">Team Members:</p>
+                          <p className="font-display text-xl text-foreground font-semibold tracking-wide">
+                            {currentTeam.members}
+                          </p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[10px] text-muted-foreground tracking-widest">INVESTED</p>
-                          <p className="font-mono text-lg tabular-nums text-deal-green">{j.totalInvestment.toLocaleString()}</p>
-                        </div>
+                      )}
+
+                      <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
+                        {currentTeam.description}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 flex items-center justify-center">
+                      <div className="bg-deal-green text-primary-foreground font-display text-[10px] tracking-[0.3em] px-6 py-3 rounded-full shadow-lg border border-deal-green/50 animate-pulse uppercase font-bold">
+                        Active
                       </div>
-                    </motion.div>
-                  ))}
-                </div>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
+            )}
 
-              {/* Team Queue */}
-              <div>
-                <h2 className="font-display text-lg text-muted-foreground tracking-wider mb-4 text-left">NEXT TO PRESENT</h2>
+            {/* LINEUP LIST */}
+            <div className="space-y-3">
+              <h3 className="text-[10px] text-muted-foreground tracking-widest mb-4 text-center lg:text-right uppercase border-t border-border/50 pt-8 font-mono">Event Lineup</h3>
+              {warRoomData.allTeams.map((team, idx) => {
+                const isPast = team.originalIndex < currentTeamIndex;
+                const isCurrent = team.originalIndex === currentTeamIndex;
 
-                {/* Currently Presenting */}
-                {currentTeam && (
+                if (isCurrent) return null;
+
+                return (
                   <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-deal-green/10 rounded-md border border-deal-green/30 mb-3"
+                    key={team.id}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.05 * idx }}
+                    className={`flex flex-col p-4 rounded-lg border transition-all ${isPast
+                      ? 'bg-secondary/20 border-border/20 opacity-40 grayscale'
+                      : 'bg-card/30 border-border/50 hover:bg-card hover:border-border'
+                      }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="text-left">
-                        <p className="text-[10px] text-deal-green tracking-widest mb-1">▶ NOW PRESENTING</p>
-                        <p className="font-display text-xl text-deal-green tracking-wider">{currentTeam.name}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{currentTeam.description}</p>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 text-left">
+                        <span className="font-mono text-lg tabular-nums w-8 text-muted-foreground/50">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <p className={`font-display text-xl tracking-wider ${isPast ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                            {team.name}
+                          </p>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                            {team.members && (
+                              <p className="text-[10px] font-mono text-deal-green/60 uppercase tracking-widest">
+                                <span className="opacity-50 mr-1.5">MEMBER:</span>
+                                {team.members}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-muted-foreground italic line-clamp-1">{team.description}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {isPast ? (
+                          <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Done</span>
+                        ) : team.originalIndex === currentTeamIndex + 1 ? (
+                          <span className="px-2 py-0.5 rounded-sm bg-deal-blue/10 text-[10px] font-mono text-deal-blue tracking-widest uppercase font-bold border border-deal-blue/20">Next Up</span>
+                        ) : (
+                          <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest uppercase">Queued</span>
+                        )}
                       </div>
                     </div>
                   </motion.div>
-                )}
-
-                {/* Upcoming Queue */}
-                <div className="space-y-2">
-                  {warRoomData.upcomingTeams.length === 0 ? (
-                    <p className="text-xs text-muted-foreground font-mono p-4 text-left">No more teams in queue</p>
-                  ) : (
-                    warRoomData.upcomingTeams.map((team, i) => (
-                      <motion.div
-                        key={team.id}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + i * 0.1 }}
-                        className={`flex items-center justify-between p-3 rounded-md border transition-all ${i === 0
-                          ? 'bg-deal-blue/10 border-deal-blue/30'
-                          : 'bg-card border-border'
-                          }`}
-                      >
-                        <div className="flex items-center gap-3 text-left">
-                          <span className="font-mono text-lg text-muted-foreground tabular-nums w-6">
-                            {i + 1}
-                          </span>
-                          <div>
-                            <p className={`font-display text-base tracking-wider ${i === 0 ? 'text-deal-blue' : 'text-foreground'}`}>
-                              {team.name}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">{team.description}</p>
-                          </div>
-                        </div>
-                        {i === 0 && (
-                          <span className="text-[10px] font-mono text-deal-blue tracking-widest">UP NEXT</span>
-                        )}
-                      </motion.div>
-                    ))
-                  )}
-                </div>
-              </div>
+                );
+              })}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 };

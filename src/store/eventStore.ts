@@ -49,7 +49,7 @@ export interface Notification {
 }
 
 export type EventStatus = 'waiting' | 'pitching' | 'deal_window' | 'paused' | 'ended';
-export type ProjectorMode = 'waiting' | 'countdown' | 'deal' | 'no_deal' | 'negotiate' | 'war_room';
+export type ProjectorMode = 'waiting' | 'countdown' | 'deal' | 'no_deal' | 'war_room';
 
 export interface EventState {
   // Event
@@ -103,6 +103,7 @@ export interface EventState {
   reorderTeams: (fromIndex: number, toIndex: number) => void;
   setCurrentTeamIndex: (index: number) => void;
   nextTeam: () => void;
+  setNextTeam: (teamId: string) => void;
   selectTeam: (index: number) => void;
 
   // Judge management
@@ -226,6 +227,26 @@ export const useEventStore = create<EventState>()(
         timerSeconds: s.pitchDuration,
         timerRunning: true,
       })),
+
+      setNextTeam: (teamId) => set((s) => {
+        const teamIndex = s.teams.findIndex(t => t.id === teamId);
+        if (teamIndex === -1 || teamIndex === s.currentTeamIndex) return s;
+
+        const newTeams = [...s.teams];
+        const [moved] = newTeams.splice(teamIndex, 1);
+        const insertAt = s.currentTeamIndex + 1;
+        newTeams.splice(insertAt, 0, moved);
+
+        return {
+          teams: newTeams,
+          eventLog: [...s.eventLog, {
+            id: `e${Date.now()}`,
+            action: 'SET_NEXT_TEAM',
+            detail: moved.name,
+            timestamp: Date.now(),
+          }],
+        };
+      }),
 
       selectTeam: (index: number) => set((s) => ({
         currentTeamIndex: Math.min(index, s.teams.length - 1),
